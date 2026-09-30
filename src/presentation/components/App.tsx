@@ -281,15 +281,19 @@ export function App() {
                       </p>
                     </div>
                   </div>
-                </div>
-                {isIncomplete && (
-                  <div className="mb-4 p-3 rounded-xl border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950 text-sm text-amber-800 dark:text-amber-200">
-                    {t('warn.incomplete', {
-                      current: currentLineup.players.length,
-                      missing: 11 - currentLineup.players.length,
-                    })}
+                  <div
+                    className="mt-3 h-1.5 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden"
+                    role="progressbar"
+                    aria-valuemin={0}
+                    aria-valuemax={11}
+                    aria-valuenow={currentLineup.players.length}
+                  >
+                    <div
+                      className="h-full rounded-full bg-green-600 transition-all"
+                      style={{ width: `${(currentLineup.players.length / 11) * 100}%` }}
+                    />
                   </div>
-                )}
+                </div>
                 <Pitch
                   formation={currentFormation}
                   lineup={currentLineup}
