@@ -1,91 +1,55 @@
-# Uso de GitHub Copilot CLI en Lineup 11
+# Uso de CLI con IA en Lineup 11
 
-Este documento registra cómo se usó asistencia de IA tipo CLI durante el desarrollo del MVP,
-qué tareas se delegaron y qué aprendizajes quedaron.
+Este documento registra cómo usé asistencia de IA por CLI mientras construía el MVP de Lineup 11: qué se decidió en la conversación, en qué se equivocó el agente y qué hice cuando eso pasó. No es un resumen de funcionalidades; es el registro de un proceso, con las partes que salieron mal incluidas.
 
-> Nota: el desarrollo de este repo se apoyó en herramientas de IA para
-> generación de código, debugging, refactorización y tests, en línea con el
-> objetivo SMART del proyecto.
+## 1. Alcance del MVP
 
-## 1. Alcance del MVP documentado
+El resultado es un MVP que permite crear y personalizar formaciones de fútbol:
 
-Funcionalidades cubiertas por el MVP:
+- Selección de esquemas tácticos (4-4-2, 4-3-3, 3-5-2, 5-3-2, 4-2-3-1 y modo libre).
+- Altas de jugadores titulares y suplentes (hasta 7 en el banco), con drag & drop sobre la cancha.
+- Edición de datos del jugador y de la alineación.
+- Guardado en el navegador, compartir por URL y exportación a PNG.
+- Internacionalización español/inglés, modo oscuro y un catálogo de 30 camisetas sobre 8 patrones.
 
-- Selección de formaciones tácticas (`src/domain/entities/formations.ts`):
-  4-4-2, 4-3-3, 3-5-2, 5-3-2, 4-2-3-1 + formación libre `custom`.
-- Incorporación de jugadores: `LineupService.addPlayerToLineup` + `addSubstituteToLineup`
-  (`src/domain/services/lineupService.ts`).
-- Posicionamiento con drag & drop: `src/presentation/components/App.tsx` (`handleDragEnd`),
-  `Pitch.tsx`, `PlayerSlot.tsx` con `@dnd-kit/core`.
-- Edición de datos:
-  - Alineación: `updateLineupDetails`, `renameLineup`
-  - Jugador (titular o suplente): `renamePlayerInLineup` → `renamePlayer` (use-case + store)
-  - Equipo: `updateColor`, `updateShirt`
-- Guardado de alineaciones: `LocalStorageLineupRepository`
-  (`src/infrastructure/persistence/localStorageLineupRepository.ts`) + acciones
-  `saveCurrentLineup / loadAllLineups / loadLineup / deleteLineup` en
-  `src/presentation/store/lineupStore.ts`.
-- Extras que superan el MVP: banca de 7 suplentes con promover/degradar,
-  export PNG (`canvasExportService.ts`), share URL (`shareService.ts`),
-  i18n en/es, dark mode, camisetas históricas.
+Stack: React 19 + TypeScript + Vite, Zustand para el estado, Tailwind v4, dnd-kit para el arrastre y Vitest para tests. La estructura está separada en `domain`, `application`, `infrastructure` y `presentation`.
 
-## 2. Cómo se usó la asistencia CLI
+## 2. Cómo trabajé con el agente
 
-Ejemplos de prompts/tareas delegadas:
+Arranqué pidiendo código. Fue la peor parte del proyecto: las primeras respuestas eran plausibles pero no encajaban con lo que tenía en la cabeza, y volvían como componentes grandes con la lógica de dominio mezclada con la UI. Cuando entendí que el problema era mi forma de pedir, cambié el orden: primero describir el problema y el alcance, después pedir implementación.
 
-1. **Generación de código**
-   - `Crear FORMATION_PRESETS con coordenadas x/y para 4-4-2, 4-3-3, 3-5-2, 5-3-2, 4-2-3-1`
-   - `Generar LineupService con cap 11 titulares + 7 suplentes y swap al mover`
-   - `Generar LocalStorageLineupRepository con normalize y safe-parse`
-2. **Implementación de funcionalidades**
-   - `Agregar rename de jugador titular/suplente en domain + use-case + store + UI inline-edit`
-   - `Mostrar badge de posición (GK, CB, CM…) siempre visible sin tapar el nombre`
-3. **Debugging**
-   - `Corregir drop de suplente a pitch en modo custom (customX/customY clamp 5-95)`
-   - `Evitar colisión de nombre vs badge en fila GK (y > 80)`
-4. **Refactorización**
-   - `Extraer getFormationPositions para unificar Pitch UI + export canvas`
-   - `Partir PlayerPool en StarterCard / BenchSection / SubCard`
-5. **Tests**
-   - `Generar tests vitest para rename: nombre vacío, jugador inexistente, persiste en repo`
-   - `Verificar i18n en/es para pool.rename / pool.save / pool.cancel`
+**Stack.** Le pedí comparar opciones de frontend, estado, estilos y drag & drop. La decisión la tomé yo, pero tener las alternativas y sus costos sobre la mesa en una sola conversación me ahorró una tarde de búsquedas.
 
-## 3. Flujo de trabajo habitual
+**Especificar antes de generar.** Trabajé con una dinámica de Spec-Driven Development sin documentos formales: antes de tocar código, definir qué debía hacer la funcionalidad y qué casos borde entraban. El renombrado de jugadores y el guardado de alineaciones salieron mucho mejor después de esa conversación previa que las features que pedí de una.
 
-1. Describir la tarea en una frase + archivos involucrados.
-2. Dejar que el CLI proponga el diff.
-3. Revisar el diff (no aceptar a ciegas), correr `npm run test` y `npm run dev`.
-4. Ajustar a mano estilos/nombres según convenciones del repo.
-5. Guardar en memoria la decisión si es arquitectónica.
+**TDD donde importaba.** Empecé con 16 tests. Hoy hay 53 en 10 archivos. Con el agente escribíamos primero los casos (nombre vacío, jugador inexistente, límite de titulares y suplentes, normalización de datos viejos guardados en `localStorage`) y después la implementación. En la UI no hice TDD puro y se nota: es la parte con menos cobertura.
 
-## 4. Aprendizajes principales
+**El caso que más me enseñó: la exportación a PNG.** La primera versión sacaba una captura del DOM con `html2canvas`. En producción de prueba, el botón tiraba `Uncaught Attempting to parse unsupported color function` y descargaba un PNG en blanco. La causa: Tailwind v4 emite colores en `oklch()` y `color-mix()`, y `html2canvas` no sabe parsear ninguna de las dos. No era un problema de configuración, era un límite de la librería.
 
-- **La IA acelera el boilerplate, no el diseño:** formaciones, services y repos salen
-  rápido, pero las decisiones (¿rename muta `players` y `substitutes` a la vez?,
-  ¿dónde va el badge para no tapar el nombre?) las toma el humano.
-- **Especificar IDs y paths evita alucinaciones:** decir
-  `src/domain/services/lineupService.ts:renamePlayerInLineup` es más fiable que
-  `agregá rename donde corresponda`.
-- **Verificación obligatoria:** todo cambio se valida con `npm run test`
-  (vitest) + prueba manual en `http://localhost:5173/`.
-- **UI mínima > UI ingeniosa:** el badge de posición fijo en `-bottom-2` con
-  `pointer-events-none` no rompe drag & drop y no tapa el nombre (que va en
-  `top-full` o `bottom-full` para GK). La versión hover-only ahorraba píxeles
-  pero escondía información táctica clave.
-- **Documentar mientras se construye:** este archivo existe porque el objetivo
-  medible pedía evidencia del uso de IA, no solo el MVP.
+La salida fue sacar la dependencia y dibujar la imagen a mano con la Canvas API: un servicio de 277 líneas que arma la tarjeta con cabecera, líneas de la cancha, chips con el color del equipo y la lista de suplentes. El resultado se ve mejor que la captura y no depende del CSS del navegador. La lección no fue "usá Canvas"; fue que una dependencia que "casi sirve" termina costando más que escribir lo que necesitás.
 
-## 5. Cómo reproducir
+**El bug que no era un bug.** La cancha seguía mostrando círculos de color cuando el panel lateral ya mostraba las camisetas nuevas. Mi primera reacción fue sospechar del store. Antes de tocar nada, pedí verificar qué estaba sirviendo el servidor: pedí el módulo `PlayerSlot` ya transformado y era el correcto; corrí los tests del flujo y pasaban.
+
+El problema no estaba en el código: había una pestaña vieja con un boundary de HMR roto y dos servidores de Vite vivos (5174 y 5175) respondiendo versiones distintas. Cerré todo, levanté uno solo en 5176 y la camiseta apareció. Cero cambios de código. Y la causa de fondo era mía: había borrado `html2CanvasExportService.ts` sin actualizar antes los imports, y eso rompió el refresh de los módulos que lo importaban.
+
+**Lo que el agente no decidió.** La elección del stack, los límites del plantel, dónde va la información táctica en la UI y el nombre del equipo. Sobre esto último hubo marcha atrás: la entidad tenía `teamName` y `name`, que sonaban a lo mismo en todos lados, así que eliminé `teamName` y dejé un solo nombre que se usa en el modal, el badge, el listado y el nombre del archivo PNG.
+
+## 3. Principales aprendizajes
+
+- Describir el problema antes de pedir código. La diferencia no es de estilo: sin contexto, el agente resuelve el síntoma y te deja el problema.
+- Un error de un solo paso cuesta caro después. Borrar un archivo antes de corregir sus imports me costó una sesión entera de debugging de un bug que no existía.
+- Cuando la UI contradice el estado, primero hay que decidir de qué lado está la mentira. Mirar el código antes de esa decisión es adivinar.
+- Los tests no son una métrica de cobertura, son la red que te permite refactorizar sin miedo. Pasar de 16 a 53 no fue para tener un número más grande.
+- Con la IA hay que revisar, pero sobre todo hay que pedir. El agente tiende a resolver rápido y en pocos archivos grandes; la separación por capas y los nombres claros hubo que pedirlos explícitamente en cada iteración.
+- Documentar mientras se trabaja. Este archivo existe porque anoté los episodios el mismo día en que pasaron. Al final del proyecto uno se acuerda de que "andaba", no de por qué.
+
+## 4. Cómo reproducir
 
 ```bash
 npm install
 npm run dev     # http://localhost:5173/
-npm run test    # vitest run
+npm run test    # 53 tests
 npm run build   # tsc --noEmit && vite build
 ```
 
-## 6. Próximos pasos sugeridos
-
-- Renombrar jugador también desde el `PlayerSlot` del pitch (hoy solo desde el pool).
-- Incluir badge de posición en el export PNG (`drawPlayers`).
-- Persistir en backend en lugar de solo `localStorage`.
+Un detalle que me costó caro: correr un solo `npm run dev` a la vez. Dos servidores en puertos distintos sirven versiones distintas del mismo módulo y el navegador te muestra una mezcla que no existe en el código.
